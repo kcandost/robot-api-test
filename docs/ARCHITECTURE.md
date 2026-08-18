@@ -20,10 +20,11 @@ The two files that matter:
 
 | | |
 |---|---|
-| Endpoint | `http://<robot-ip>:7242` (plain HTTP, no auth, same LAN) |
+| Endpoint | `http://<robot-ip>:7242` (plain HTTP, no auth) |
 | Pause | `POST /api/v1/tasks/pause` |
 | Resume | `POST /api/v1/tasks/resume` |
 | Request | empty body, 3 s timeout, any 2xx = success |
+| Network | the robot's own hotspot (its GSM router creates the LAN); pause/resume never rides GSM |
 
 ## If it's not working
 
@@ -31,7 +32,7 @@ Everything the controller does is in the on-screen log with timestamps. Match yo
 
 | Symptom | Where to look |
 |---|---|
-| Button never turns into a countdown, log shows `pause failed` | Robot unreachable: wrong IP/port, different network, or robot API down. Curl it: `curl -X POST http://<ip>:7242/api/v1/tasks/pause` |
+| Button never turns into a countdown, log shows `pause failed` | Robot unreachable: wrong IP/port, tablet dropped off the robot's hotspot, or robot API down. Curl it: `curl -X POST http://<ip>:7242/api/v1/tasks/pause` |
 | Log shows `touch ignored — no paired robot` | The URL field doesn't start with `http` |
 | Countdown reaches 0 but robot stays stopped | Watch the log: resume is retrying. Robot is rejecting or not receiving `/tasks/resume` |
 | Countdown and the log's `resumed` line disagree in time | Controller timing bug. The countdown is an independent UI clock; divergence means the controller's own timer is off |

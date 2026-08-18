@@ -17,7 +17,8 @@ Every request, result, and retry shows in the on-screen log with timestamps.
 
 ## Running it
 
-Android Studio, on a device on the robot's network. The URL field defaults to
+Android Studio, on a device joined to the robot's own hotspot: the robot's GSM router
+creates the LAN, and the pause/resume traffic stays local (it never rides GSM). The URL field defaults to
 port 7242, plain http (manifest allows cleartext for this). `pauseWindowMs`, where the
 controller is constructed in `MainActivity.kt`, shortens the 60 s wait for testing.
 
