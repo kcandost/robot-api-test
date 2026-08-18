@@ -24,7 +24,7 @@ Every request, result, and retry shows in the on-screen log with timestamps.
 
 | | |
 |---|---|
-| Endpoint | `http://<robot-ip>:7242` (plain HTTP, no auth) |
+| Endpoint | `http://<robot-ip>:7242` (plain HTTP) |
 | Pause | `POST /api/v1/tasks/pause` |
 | Resume | `POST /api/v1/tasks/resume` |
 | Request | empty body, 3 s timeout, any 2xx = success |
