@@ -16,8 +16,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +27,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.edit
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -35,15 +37,13 @@ import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import androidx.lifecycle.lifecycleScope
 
 /**
- * One-screen harness for [RobotPauseController].
+ * Test bench for [RobotPauseController].
  *
- * Enter the robot's base URL, tap the big button. The first tap POSTs pause; the button
- * turns into a countdown to the automatic resume. Every further tap restarts the countdown
- * (the sliding window). The log pane shows exactly what the controller did, including
- * retries, so failures are visible without adb.
+ * Enter the robot's base URL and tap the button: the first tap sends pause and the
+ * button becomes a countdown to the automatic resume; further taps restart the
+ * countdown. Every request, result, and retry appears in the log pane.
  */
 class MainActivity : ComponentActivity() {
 
@@ -52,12 +52,10 @@ class MainActivity : ComponentActivity() {
 
         val prefs = getSharedPreferences("robot_test", MODE_PRIVATE)
 
-        // Screen state the controller drives via its injected lambdas.
         val logLines = mutableStateListOf<String>()
         var pausedByUs by mutableStateOf(false)
-        // When the current resume window ends. The UI owns this; the controller owns the
-        // actual resume timing — the two only drift if the controller is buggy, which is
-        // exactly what this app exists to reveal (compare countdown vs. log lines).
+        // The countdown shown on the button. The controller runs its own timer;
+        // if the log's resume time disagrees with this countdown, the controller is at fault.
         var resumeDeadlineMs by mutableLongStateOf(0L)
 
         fun log(line: String) {
@@ -74,14 +72,17 @@ class MainActivity : ComponentActivity() {
                 if (url.startsWith("http")) RobotTarget("test-robot", url) else null
             },
             persistPausedByUs = { paused ->
-                prefs.edit().putBoolean("paused_by_us", paused).apply()
+                prefs.edit { putBoolean("paused_by_us", paused) }
                 pausedByUs = paused
-                if (paused) resumeDeadlineMs = System.currentTimeMillis() + RobotPauseController.DEFAULT_PAUSE_WINDOW_MS
+                if (paused) {
+                    resumeDeadlineMs =
+                        System.currentTimeMillis() + RobotPauseController.DEFAULT_PAUSE_WINDOW_MS
+                }
             },
             post = { url ->
-                log("POST $url …")
+                log("POST $url ...")
                 val ok = httpPost(url)
-                log(if (ok) "→ OK" else "→ FAILED")
+                log(if (ok) "-> OK" else "-> FAILED")
                 ok
             },
             log = ::log,
@@ -98,14 +99,13 @@ class MainActivity : ComponentActivity() {
                         value = baseUrl,
                         onValueChange = {
                             baseUrl = it
-                            prefs.edit().putString("base_url", it).apply()
+                            prefs.edit { putString("base_url", it) }
                         },
                         label = { Text("Robot base URL") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
 
-                    // Ticks every 200 ms while paused so the countdown text stays live.
                     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
                     LaunchedEffect(pausedByUs) {
                         while (pausedByUs) {
@@ -117,7 +117,8 @@ class MainActivity : ComponentActivity() {
                     Button(
                         onClick = {
                             if (pausedByUs) {
-                                resumeDeadlineMs = System.currentTimeMillis() + RobotPauseController.DEFAULT_PAUSE_WINDOW_MS
+                                resumeDeadlineMs =
+                                    System.currentTimeMillis() + RobotPauseController.DEFAULT_PAUSE_WINDOW_MS
                             }
                             controller.onUserTouch()
                         },
@@ -125,7 +126,7 @@ class MainActivity : ComponentActivity() {
                     ) {
                         val secondsLeft = ((resumeDeadlineMs - nowMs) / 1000).coerceAtLeast(0)
                         Text(
-                            text = if (pausedByUs) "Resume in ${secondsLeft}s — tap to reset"
+                            text = if (pausedByUs) "Resume in ${secondsLeft}s (tap to reset)"
                             else "TAP TO PAUSE ROBOT",
                             fontSize = 22.sp,
                         )
@@ -143,7 +144,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Bare POST with empty body; true on any 2xx. Never throws (the controller requires that). */
+    /** POST with an empty body; true on any 2xx. Never throws, as the controller requires. */
     private suspend fun httpPost(url: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val conn = URL(url).openConnection() as HttpURLConnection
@@ -157,7 +158,7 @@ class MainActivity : ComponentActivity() {
             } finally {
                 conn.disconnect()
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }
