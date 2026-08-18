@@ -1,6 +1,6 @@
 # Robot API Test
 
-[PDF version of this document](docs/RobotApiTest.pdf)
+[PDF version of this document](docs/RobotApiTest.pdf) · [Sideload-ready APK](../../releases/latest)
 
 Harness around `RobotPauseController.kt`, copied out of our app unchanged (only edit:
 Timber became the on-screen log). Whatever gets fixed here, I'll port back.
