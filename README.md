@@ -8,19 +8,7 @@ Logic is in `RobotPauseController.kt`; UI and transport in `MainActivity.kt`.
 
 ## What I tried to build
 
-```mermaid
-sequenceDiagram
-    participant V as Visitor
-    participant K as Tablet (this app)
-    participant R as Robot (:7242)
-    V->>K: first touch
-    K->>R: POST /api/v1/tasks/pause
-    R-->>K: 2xx (robot stops)
-    V->>K: more taps (each restarts the 60 s window, no re-POST)
-    Note over K: 60 s pass with no touches
-    K->>R: POST /api/v1/tasks/resume
-    R-->>K: 2xx (robot cleans again)
-```
+![Timeline: first touch pauses the robot, taps restart the 60 s window, then resume](docs/img/flow-timeline.png)
 
 - First touch sends pause, once per engagement, attempts at 0 / 2 / 5 s. The button
   becomes a 60 s countdown.
@@ -61,15 +49,7 @@ controller is constructed in `MainActivity.kt`, shortens the 60 s wait for testi
 
 ## The controller's state machine
 
-```mermaid
-stateDiagram-v2
-    [*] --> IDLE
-    IDLE --> PAUSING: touch, robot paired
-    PAUSING --> PAUSED: pause 2xx (tries at 0 / 2 / 5 s)
-    PAUSING --> IDLE: all 3 tries fail (next touch starts over)
-    PAUSED --> PAUSED: touch restarts the 60 s window (no re-POST)
-    PAUSED --> IDLE: resume 2xx, 60 s after last touch (retries 5 / 15 / 30 s, then every 60 s forever)
-```
+![State machine: IDLE to PAUSING on touch, PAUSED on pause 2xx, back to IDLE on resume 2xx](docs/img/state-machine.png)
 
 Pause is sent once per engagement: only the IDLE-to-PAUSING edge posts pause. While
 PAUSED, every touch just cancels and restarts the resume timer.
