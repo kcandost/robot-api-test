@@ -1,42 +1,30 @@
 # Robot API Test
 
-This is a small harness I built around `RobotPauseController.kt`, the class that pauses
-the cleaning robot while someone is using our kiosk. I can't share the app it normally
-lives in, so I extracted the class unchanged (the only edit: Timber logging became an
-on-screen log) and wrapped it in a one-screen app so the logic can be tested and
-corrected against a real robot. Whatever gets fixed here, I'll port back.
+Harness around `RobotPauseController.kt`, copied out of our app unchanged (only edit:
+Timber became the on-screen log). Whatever gets fixed here, I'll port back.
 
 ## What I tried to build
 
-- First touch sends `POST <base>/api/v1/tasks/pause`, once per engagement, with
-  attempts at 0 / 2 / 5 s. The button then turns into a 60 s countdown.
-- Every further tap restarts the countdown without re-sending pause.
-- When 60 s pass with no taps, it sends `POST <base>/api/v1/tasks/resume`, retrying
-  at 5 / 15 / 30 s and then every 60 s until the robot answers 2xx. My intent was that
-  the robot can never be left stranded in pause.
+- First touch sends `POST <base>/api/v1/tasks/pause`, once per engagement, attempts
+  at 0 / 2 / 5 s. The button becomes a 60 s countdown.
+- Further taps restart the countdown without re-sending pause.
+- 60 s with no taps sends `POST <base>/api/v1/tasks/resume`, retrying at 5 / 15 / 30 s,
+  then every 60 s until 2xx. Intent: the robot can never be left stranded in pause.
 - If the app dies while the robot is paused, a persisted flag makes the next launch
   send resume immediately.
 
-Every request, result, and retry shows in the on-screen log with timestamps, so
-adb shouldn't be needed.
+Every request, result, and retry shows in the on-screen log with timestamps.
 
 ## Running it
 
-Open this folder in Android Studio and run it on a device on the same network as the
-robot. The URL field defaults to port 7242, plain http, which is what our pairing code
-uses; the manifest allows cleartext traffic for that reason. The 60 s window is the
-`pauseWindowMs` parameter where the controller is constructed in `MainActivity.kt`,
-in case waiting a full minute per cycle gets tedious.
+Android Studio, on a device on the robot's network. The URL field defaults to
+port 7242, plain http (manifest allows cleartext for this). `pauseWindowMs`, where the
+controller is constructed in `MainActivity.kt`, shortens the 60 s wait for testing.
 
 ## What I'd like checked
 
-Whether the calls, timing, and retry behavior above actually hold against a real robot,
-and whether my assumptions about the robot API (paths, empty body, 2xx-only success,
-no auth) are right. The places where I'm least confident are listed in
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), together with the state machine and a
-table of failure symptoms mapped to my best guesses at their causes.
-
-One caveat about the UI: the countdown on the button is my own UI-side clock. The
-controller runs its own timer internally. If the log's resume moment disagrees with
-the countdown, that disagreement is a controller bug, and surfacing exactly that kind
-of thing is why I built this app.
+Whether the behavior above holds against a real robot, and whether my API assumptions
+(paths, empty body, 2xx-only success, no auth) are right. The parts I'm least sure of
+are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), with the state machine and my
+symptom-to-cause guesses. One caveat: the button countdown is a UI-side clock; if it
+disagrees with the log's resume moment, the controller's own timer is at fault.
