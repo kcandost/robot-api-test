@@ -32,6 +32,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.text.SimpleDateFormat
@@ -63,7 +64,7 @@ class MainActivity : ComponentActivity() {
             logLines.add(0, "$ts  $line") // newest first
         }
 
-        var baseUrl by mutableStateOf(prefs.getString("base_url", "http://192.168.1.100:7242")!!)
+        var baseUrl by mutableStateOf(prefs.getString("base_url", "http://192.168.3.3:7242")!!)
 
         val controller = RobotPauseController(
             scope = lifecycleScope,
@@ -81,9 +82,9 @@ class MainActivity : ComponentActivity() {
             },
             post = { url ->
                 log("POST $url ...")
-                val ok = httpPost(url)
-                log(if (ok) "-> OK" else "-> FAILED")
-                ok
+                val result = httpPost(url)
+                log(if (result.confirmed) "-> OK (${result.detail})" else "-> FAILED (${result.detail})")
+                result.confirmed
             },
             log = ::log,
         )
@@ -144,22 +145,61 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** POST with an empty body; true on any 2xx. Never throws, as the controller requires. */
-    private suspend fun httpPost(url: String): Boolean = withContext(Dispatchers.IO) {
+    /** [confirmed] is what the controller acts on; [detail] is for the log pane only. */
+    private data class PostResult(val confirmed: Boolean, val detail: String)
+
+    /**
+     * POST with an empty body. The robot answers HTTP 200 even when it refuses the
+     * command and reports the real outcome in the response envelope, so the status
+     * code alone is not confirmation. Never throws, as the controller requires.
+     */
+    private suspend fun httpPost(url: String): PostResult = withContext(Dispatchers.IO) {
         try {
             val conn = URL(url).openConnection() as HttpURLConnection
             try {
                 conn.requestMethod = "POST"
                 conn.connectTimeout = 3_000
                 conn.readTimeout = 3_000
+                conn.setRequestProperty("Accept", "application/json")
                 conn.doOutput = true
                 conn.outputStream.use { } // empty body
-                conn.responseCode in 200..299
+                val code = conn.responseCode
+                val body = runCatching {
+                    (if (code in 200..299) conn.inputStream else conn.errorStream)
+                        ?.bufferedReader()?.use { it.readText() }
+                }.getOrNull().orEmpty()
+                if (code !in 200..299) {
+                    PostResult(false, "HTTP $code ${body.take(200)}".trim())
+                } else {
+                    readEnvelope(code, body)
+                }
             } finally {
                 conn.disconnect()
             }
-        } catch (_: Exception) {
-            false
+        } catch (e: Exception) {
+            PostResult(false, e.javaClass.simpleName + e.message?.let { ": $it" }.orEmpty())
         }
+    }
+
+    /**
+     * `{"status_code":200,"success":true,"message":"","data":{},"error":{...}}` — the
+     * `success` field decides, since a refusal also arrives as HTTP 200. A body that is
+     * not that envelope leaves the status code as the only signal, so it is trusted and
+     * logged verbatim rather than silently read as a refusal.
+     */
+    private fun readEnvelope(code: Int, body: String): PostResult {
+        val json = runCatching { JSONObject(body) }.getOrNull()
+            ?: return PostResult(true, "HTTP $code, no JSON body: ${body.take(200)}")
+        if (!json.has("success")) {
+            return PostResult(true, "HTTP $code, no success field: ${body.take(200)}")
+        }
+        if (json.optBoolean("success")) return PostResult(true, "HTTP $code success=true")
+        val error = json.optJSONObject("error")
+        val reason = listOfNotNull(
+            error?.optString("code")?.ifBlank { null },
+            error?.optString("message")?.ifBlank { null },
+            json.optString("message").ifBlank { null },
+        ).joinToString(" ").ifBlank { "no reason given" }
+        return PostResult(false, "robot refused: $reason")
     }
 }
